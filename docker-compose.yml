@@ -1,0 +1,45 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-regional_map}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-regional_map}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-regional_map}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      INPUT_DIR: /data/input
+      OUTPUT_DIR: /data/output
+      RESET_SOURCE: ${RESET_SOURCE:-true}
+      EXCLUDE_TOLL_ROADS: ${EXCLUDE_TOLL_ROADS:-false}
+    volumes:
+      - ./data/input:/data/input:ro
+      - ./data/output:/data/output
+      - ./app:/app:ro
+      - ./sql:/sql:ro
+    command: ["python3", "/app/build_network.py"]
+
+volumes:
+  pgdata:
