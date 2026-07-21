@@ -2,7 +2,7 @@ services:
   db:
     build:
       context: .
-      dockerfile: Dockerfile.db
+      dockerfile: ./docker/Dockerfile.db
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-regional_map}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -12,7 +12,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-regional_map}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-regional_map}"
+        ]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -20,7 +24,7 @@ services:
   etl:
     build:
       context: .
-      dockerfile: Dockerfile.etl
+      dockerfile: ./docker/Dockerfile.etl
     depends_on:
       db:
         condition: service_healthy
@@ -40,6 +44,25 @@ services:
       - ./app:/app:ro
       - ./sql:/sql:ro
     command: ["python3", "/app/build_network.py"]
+
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.web
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-regional_map}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      - ./webapp:/var/www/html:ro
+    restart: unless-stopped
 
 volumes:
   pgdata:

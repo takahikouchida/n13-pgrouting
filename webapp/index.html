@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pgRouting 経路検索デモ</title>
+  <link href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css" rel="stylesheet">
+  <style>
+    :root {
+      --panel-bg: rgba(255,255,255,.96);
+      --border: #dfe3e8;
+      --text: #1f2937;
+      --muted: #667085;
+      --primary: #2563eb;
+      --danger: #dc2626;
+      --success: #16a34a;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: #eef2f6;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+    }
+
+    .panel {
+      position: absolute;
+      z-index: 10;
+      top: 16px;
+      left: 16px;
+      width: min(420px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+      background: var(--panel-bg);
+      border: 1px solid rgba(255,255,255,.7);
+      border-radius: 16px;
+      box-shadow: 0 14px 38px rgba(15,23,42,.2);
+      backdrop-filter: blur(10px);
+    }
+
+    .panel-header {
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .panel-subtitle {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .panel-body {
+      padding: 14px 16px 16px;
+    }
+
+    .section {
+      margin-bottom: 14px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #344054;
+      margin-bottom: 7px;
+    }
+
+    .basemap-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .basemap-btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: white;
+      border-radius: 10px;
+      padding: 9px 6px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .basemap-btn.active {
+      color: white;
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+
+    .point-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 12px;
+      margin-bottom: 8px;
+      background: #fff;
+    }
+
+    .point-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .point-name {
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .point-value {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge.start { background: var(--primary); }
+    .badge.end { background: var(--success); }
+
+    .mode-hint {
+      padding: 9px 10px;
+      border-radius: 10px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    button.action {
+      appearance: none;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button.primary {
+      color: white;
+      background: var(--primary);
+    }
+
+    button.secondary {
+      color: #344054;
+      background: #f2f4f7;
+      border: 1px solid var(--border);
+    }
+
+    button.action:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .metric {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .metric-value {
+      display: block;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .metric-label {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--success); }
+
+    .maplibregl-popup-content {
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+
+    @media (max-width: 640px) {
+      .panel {
+        top: auto;
+        bottom: 8px;
+        left: 8px;
+        width: calc(100vw - 16px);
+        max-height: 52vh;
+        border-radius: 14px;
+      }
+
+      .panel-header {
+        padding: 12px 14px 10px;
+      }
+
+      .panel-body {
+        padding: 12px 14px 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="panel">
+  <div class="panel-header">
+    <h1 class="panel-title">pgRouting 経路検索デモ</h1>
+    <p class="panel-subtitle">地図をクリックして開始地点・終了地点を指定できます</p>
+  </div>
+
+  <div class="panel-body">
+    <div class="section">
+      <div class="section-title">背景地図</div>
+      <div class="basemap-grid">
+        <button class="basemap-btn active" data-style="gsi-standard">地理院地図</button>
+        <button class="basemap-btn" data-style="gsi-photo">地理院写真</button>
+        <button class="basemap-btn" data-style="osm">OSM</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div id="modeHint" class="mode-hint">
+        地図上で開始地点をクリックしてください。
+      </div>
+
+      <div class="point-card">
+        <div class="point-row">
+          <span class="point-name">開始地点</span>
+          <span class="badge start">START</span>
+        </div>
+        <div id="startValue" class="point-value">未選択</div>
+      </div>
+
+      <div class="point-card">
+        <div class="point-row">
+          <span class="point-name">終了地点</span>
+          <span class="badge end">GOAL</span>
+        </div>
+        <div id="endValue" class="point-value">未選択</div>
+      </div>
+
+      <div class="button-row">
+        <button id="searchBtn" class="action primary" disabled>経路検索</button>
+        <button id="resetBtn" class="action secondary">地点をリセット</button>
+      </div>
+
+      <div class="summary">
+        <div class="metric">
+          <span id="distanceValue" class="metric-value">-</span>
+          <span class="metric-label">距離</span>
+        </div>
+        <div class="metric">
+          <span id="edgeValue" class="metric-value">-</span>
+          <span class="metric-label">エッジ数</span>
+        </div>
+        <div class="metric">
+          <span id="elapsedValue" class="metric-value">-</span>
+          <span class="metric-label">処理時間</span>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
+<script>
+const rasterStyles = {
+  'gsi-standard': {
+    name: '地理院地図',
+    tiles: ['https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png'],
+    attribution: '地理院タイル'
+  },
+  'gsi-photo': {
+    name: '地理院写真',
+    tiles: ['https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg'],
+    attribution: '地理院タイル（全国最新写真）'
+  },
+  'osm': {
+    name: 'OpenStreetMap',
+    tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+    attribution: '&copy; OpenStreetMap contributors'
+  }
+};
+
+const initialCenter = [139.733, 35.685];
+
+const map = new maplibregl.Map({
+  container: 'map',
+  center: initialCenter,
+  zoom: 11,
+  style: createStyle(rasterStyles['gsi-standard'])
+});
+
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }));
+
+let startPoint = null;
+let endPoint = null;
+let startMarker = null;
+let endMarker = null;
+let activeBasemap = 'gsi-standard';
+
+function createStyle(config) {
+  return {
+    version: 8,
+    sources: {
+      basemap: {
+        type: 'raster',
+        tiles: config.tiles,
+        tileSize: 256,
+        attribution: config.attribution
+      }
+    },
+    layers: [{
+      id: 'basemap',
+      type: 'raster',
+      source: 'basemap'
+    }]
+  };
+}
+
+function formatCoord(point) {
+  return `${point.lng.toFixed(6)}, ${point.lat.toFixed(6)}`;
+}
+
+function updateUi() {
+  document.getElementById('startValue').textContent =
+    startPoint ? formatCoord(startPoint) : '未選択';
+
+  document.getElementById('endValue').textContent =
+    endPoint ? formatCoord(endPoint) : '未選択';
+
+  document.getElementById('searchBtn').disabled = !(startPoint && endPoint);
+
+  const hint = document.getElementById('modeHint');
+  if (!startPoint) {
+    hint.textContent = '地図上で開始地点をクリックしてください。';
+  } else if (!endPoint) {
+    hint.textContent = '次に、終了地点をクリックしてください。';
+  } else {
+    hint.textContent = '地点を変更する場合は、開始地点から順に再選択してください。';
+  }
+}
+
+function addStartMarker(point) {
+  startMarker?.remove();
+  startMarker = new maplibregl.Marker({ color: '#2563eb' })
+    .setLngLat([point.lng, point.lat])
+    .setPopup(new maplibregl.Popup().setText('開始地点'))
+    .addTo(map);
+}
+
+function addEndMarker(point) {
+  endMarker?.remove();
+  endMarker = new maplibregl.Marker({ color: '#16a34a' })
+    .setLngLat([point.lng, point.lat])
+    .setPopup(new maplibregl.Popup().setText('終了地点'))
+    .addTo(map);
+}
+
+function clearRoute() {
+  if (map.getLayer('route-line')) map.removeLayer('route-line');
+  if (map.getSource('route')) map.removeSource('route');
+
+  document.getElementById('distanceValue').textContent = '-';
+  document.getElementById('edgeValue').textContent = '-';
+  document.getElementById('elapsedValue').textContent = '-';
+}
+
+function resetPoints() {
+  startPoint = null;
+  endPoint = null;
+  startMarker?.remove();
+  endMarker?.remove();
+  startMarker = null;
+  endMarker = null;
+
+  clearRoute();
+
+  const status = document.getElementById('status');
+  status.textContent = '';
+  status.className = 'status';
+
+  updateUi();
+}
+
+async function searchRoute() {
+  if (!startPoint || !endPoint) return;
+
+  const status = document.getElementById('status');
+  status.textContent = '経路を検索しています…';
+  status.className = 'status';
+
+  try {
+    const params = new URLSearchParams({
+      start_lng: startPoint.lng,
+      start_lat: startPoint.lat,
+      end_lng: endPoint.lng,
+      end_lat: endPoint.lat,
+      margin: 0.05
+    });
+
+    const response = await fetch(`route.php?${params.toString()}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '経路検索に失敗しました');
+    }
+
+    if (!data.features || data.features.length === 0) {
+      throw new Error('経路が見つかりませんでした');
+    }
+
+    if (map.getSource('route')) {
+      map.getSource('route').setData(data);
+    } else {
+      map.addSource('route', {
+        type: 'geojson',
+        data
+      });
+
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-color': '#dc2626',
+          'line-width': 6,
+          'line-opacity': 0.9
+        }
+      });
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    for (const feature of data.features) {
+      for (const coord of feature.geometry.coordinates) {
+        bounds.extend(coord);
+      }
+    }
+
+    map.fitBounds(bounds, {
+      padding: { top: 70, bottom: 70, left: 460, right: 70 },
+      maxZoom: 16
+    });
+
+    const summary = data.summary || {};
+    document.getElementById('distanceValue').textContent =
+      `${Number(summary.distance_km || 0).toFixed(2)} km`;
+    document.getElementById('edgeValue').textContent =
+      summary.edge_count ?? '-';
+    document.getElementById('elapsedValue').textContent =
+      summary.elapsed_ms ? `${summary.elapsed_ms} ms` : '-';
+
+    status.textContent = '経路を描画しました。';
+    status.className = 'status success';
+  } catch (error) {
+    console.error(error);
+    status.textContent = error.message;
+    status.className = 'status error';
+  }
+}
+
+function switchBasemap(styleKey) {
+  activeBasemap = styleKey;
+  const routeData = map.getSource('route')?._data || null;
+
+  map.setStyle(createStyle(rasterStyles[styleKey]));
+
+  map.once('styledata', () => {
+    if (routeData) {
+      map.addSource('route', {
+        type: 'geojson',
+        data: routeData
+      });
+
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round'
+        },
+        paint: {
+          'line-color': '#dc2626',
+          'line-width': 6,
+          'line-opacity': 0.9
+        }
+      });
+    }
+  });
+
+  document.querySelectorAll('.basemap-btn').forEach(button => {
+    button.classList.toggle('active', button.dataset.style === styleKey);
+  });
+}
+
+map.on('click', (event) => {
+  const clicked = {
+    lng: event.lngLat.lng,
+    lat: event.lngLat.lat
+  };
+
+  if (!startPoint || (startPoint && endPoint)) {
+    clearRoute();
+    startPoint = clicked;
+    endPoint = null;
+    endMarker?.remove();
+    endMarker = null;
+    addStartMarker(clicked);
+  } else {
+    endPoint = clicked;
+    addEndMarker(clicked);
+  }
+
+  updateUi();
+});
+
+document.querySelectorAll('.basemap-btn').forEach(button => {
+  button.addEventListener('click', () => {
+    switchBasemap(button.dataset.style);
+  });
+});
+
+document.getElementById('searchBtn').addEventListener('click', searchRoute);
+document.getElementById('resetBtn').addEventListener('click', resetPoints);
+
+map.on('load', updateUi);
+</script>
+</body>
+</html>

@@ -60,20 +60,7 @@ FROM pgr_dijkstra(
 );
 ```
 
-## 5. 高齢者向けコスト経路
-
-```sql
-SELECT *
-FROM pgr_dijkstra(
-  'SELECT id, source, target, cost, reverse_cost
-   FROM routing.road_edges',
-  100,
-  200,
-  directed := false
-);
-```
-
-## 6. 任意座標の最寄りノード
+## 5. 任意座標の最寄りノード
 
 ```sql
 WITH p AS (
@@ -90,7 +77,7 @@ ORDER BY v.geom <-> p.geom
 LIMIT 1;
 ```
 
-## 7. 再実行
+## 6. 再実行
 
 初期値では毎回原本テーブルを空にして再構築します。
 
@@ -100,7 +87,7 @@ RESET_SOURCE=true
 
 追加投入する場合のみ`false`へ変更します。同じShapefileを重ねて入れないでください。
 
-## 8. 自動処理の範囲と制約
+## 7. 自動処理の範囲と制約
 
 この版は、道路の始点・終点座標が完全一致する箇所を同一ノードにします。
 
@@ -113,6 +100,6 @@ RESET_SOURCE=true
 
 全国一律でスナップすると、橋・高架・トンネル・並行道路を誤接続する危険があるためです。まず`audit.network_summary`の連結成分数を確認し、必要地域だけローカル投影座標系で補正してください。
 
-## 9. 注意
+## 8. 注意
 
 Dockerイメージのタグは環境に応じて更新が必要な場合があります。`Dockerfile.db`はPostgreSQL 16 / PostGIS 3.4を基準にしています。
